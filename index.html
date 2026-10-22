@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2D 雙人線上冒險大亂鬥</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+        
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Fredoka', cursive, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+
+        .game-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            border-radius: 24px;
+        }
+
+        .btn-touch {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.1s ease;
+        }
+
+        .btn-touch:active {
+            background: rgba(255, 255, 255, 0.35);
+            transform: scale(0.95);
+        }
+
+        canvas {
+            display: block;
+            border-radius: 16px;
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+        }
+    </style>
+</head>
+<body class="p-2 sm:p-4">
+
+    <div class="game-card p-3 sm:p-5 w-full max-w-4xl flex flex-col items-center gap-3">
+        <!-- 頂部資訊欄 -->
+        <div class="flex justify-between items-center w-full px-1 sm:px-2">
+            <div class="flex items-center gap-2 sm:gap-3">
+                <div class="bg-indigo-600/50 p-2 sm:p-3 rounded-xl border border-indigo-400/30">
+                    <i class="fa-solid fa-gamepad text-indigo-300 text-lg sm:text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-xl font-bold tracking-wide text-indigo-200 flex items-center gap-2">
+                        2D 萌娘金幣大亂鬥
+                        <span id="modeBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">本地模式</span>
+                    </h1>
+                    <p id="roomInfoText" class="text-xs text-slate-400">P1(藍狐): [A/D]移動 [W/Space]跳躍 | P2(粉兔): [←/→]移動 [↑]跳躍</p>
+                </div>
+            </div>
+
+            <!-- 計分與控制面板 -->
+            <div class="flex items-center gap-1.5 sm:gap-3">
+                <!-- P1 計分板 -->
+                <div id="p1ScoreCard" class="bg-indigo-500/20 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl border border-indigo-500/30 flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                    <span class="text-xs font-semibold text-indigo-200">P1:</span>
+                    <span id="scoreP1" class="text-sm sm:text-lg font-bold text-indigo-300">0</span>
+                </div>
+                <!-- P2 計分板 -->
+                <div id="p2ScoreCard" class="bg-rose-500/20 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl border border-rose-500/30 flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse"></span>
+                    <span class="text-xs font-semibold text-rose-200">P2:</span>
+                    <span id="scoreP2" class="text-sm sm:text-lg font-bold text-rose-300">0</span>
+                </div>
+                
+                <button id="audioToggle" class="bg-slate-700/60 hover:bg-slate-600/80 p-2 sm:p-2.5 rounded-xl border border-slate-500/30 text-slate-200 transition">
+                    <i id="audioIcon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button id="resetBtn" class="bg-indigo-600 hover:bg-indigo-500 p-2 sm:p-2.5 rounded-xl text-white font-semibold transition shadow-lg shadow-indigo-600/30">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 遊戲畫布容器 -->
+        <div class="relative w-full aspect-[16/9] max-h-[60vh] flex items-center justify-center">
+            <canvas id="gameCanvas" class="w-full h-full shadow-inner"></canvas>
+            
+            <!-- 模式選擇與大廳遮罩 -->
+            <div id="startOverlay" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-4 gap-4 z-10 transition-opacity duration-300 overflow-y-auto">
+                <div class="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-indigo-300 to-rose-400 text-center">
+                    2D 萌娘跨裝置線上爭奪戰
+                </div>
+
+                <!-- 角色選擇區域 -->
+                <div class="w-full max-w-md bg-slate-900/90 border border-slate-700/80 p-3 rounded-2xl flex flex-col items-center gap-2">
+                    <div class="text-xs font-bold text-slate-300 flex items-center gap-1">
+                        <i class="fa-solid fa-user-gear text-indigo-400"></i> 選擇您的角色形象
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 w-full">
+                        <!-- 選擇角色 1: 藍色狐狸女 -->
+                        <div id="selectSkinFox" onclick="selectCharacter('fox')" class="cursor-pointer bg-slate-800 hover:bg-slate-700/80 border-2 border-indigo-500 rounded-xl p-2.5 flex flex-col items-center transition relative">
+                            <div class="w-12 h-12 rounded-full bg-indigo-950/80 border border-indigo-400 flex items-center justify-center text-2xl mb-1">
+                                🦊
+                            </div>
+                            <span class="text-xs font-bold text-indigo-200">藍色狐狸萌娘</span>
+                            <span class="text-[10px] text-slate-400">蓬鬆大尾巴 / 狐耳帽</span>
+                            <div id="badgeFox" class="absolute top-2 right-2 bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">已選擇</div>
+                        </div>
+
+                        <!-- 選擇角色 2: 粉紅兔兔女 -->
+                        <div id="selectSkinBunny" onclick="selectCharacter('bunny')" class="cursor-pointer bg-slate-800 hover:bg-slate-700/80 border-2 border-transparent rounded-xl p-2.5 flex flex-col items-center transition relative">
+                            <div class="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-400 flex items-center justify-center text-2xl mb-1">
+                                🐰
+                            </div>
+                            <span class="text-xs font-bold text-rose-200">粉紅兔兔萌娘</span>
+                            <span class="text-[10px] text-slate-400">毛毛圓尾巴 / 兔耳帽</span>
+                            <div id="badgeBunny" class="absolute top-2 right-2 bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold hidden">選擇</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模式選擇切換 -->
+                <div class="flex bg-slate-900/80 p-1.5 rounded-2xl border border-slate-700/60 gap-2">
+                    <button id="tabLocal" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-indigo-600 text-white transition">
+                        <i class="fa-solid fa-tablet-screen-button mr-1"></i> 同平板雙人
+                    </button>
+                    <button id="tabOnline" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition">
+                        <i class="fa-solid fa-globe mr-1"></i> 跨平板線上對戰
+                    </button>
+                </div>
+
+                <!-- 同機對戰說明區塊 -->
+                <div id="panelLocal" class="flex flex-col items-center gap-3 w-full max-w-md">
+                    <div class="grid grid-cols-2 gap-3 w-full text-xs sm:text-sm">
+                        <div class="bg-indigo-950/60 p-3 rounded-xl border border-indigo-500/40 text-center">
+                            <p class="font-bold text-indigo-300 mb-1">玩家 1 (藍色 P1)</p>
+                            <p class="text-slate-300">移動：A / D 鍵</p>
+                            <p class="text-slate-300">跳躍：W / Space 鍵</p>
+                        </div>
+                        <div class="bg-rose-950/60 p-3 rounded-xl border border-rose-500/40 text-center">
+                            <p class="font-bold text-rose-300 mb-1">玩家 2 (紅色 P2)</p>
+                            <p class="text-slate-300">移動：方向鍵 ← / →</p>
+                            <p class="text-slate-300">跳躍：方向鍵 ↑</p>
+                        </div>
+                    </div>
+                    <button id="startLocalBtn" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-rose-500 hover:from-indigo-400 hover:to-rose-400 text-white font-bold text-base rounded-xl shadow-lg shadow-indigo-500/30 transform active:scale-95 transition">
+                        <i class="fa-solid fa-play mr-2"></i> 開始同機對決
+                    </button>
+                </div>
+
+                <!-- 線上對戰面板 -->
+                <div id="panelOnline" class="hidden flex-col items-center gap-3 w-full max-w-md">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                        <!-- 創建房間 -->
+                        <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 flex flex-col items-center text-center gap-2">
+                            <i class="fa-solid fa-plus-circle text-indigo-400 text-2xl"></i>
+                            <p class="font-bold text-sm text-indigo-200">我是主機 (P1 藍)</p>
+                            <p class="text-xs text-slate-400">創建新房間，邀請另一台平板加入</p>
+                            <button id="createRoomBtn" class="mt-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg w-full transition">
+                                創建線上房間
+                            </button>
+                        </div>
+
+                        <!-- 加入房間 -->
+                        <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 flex flex-col items-center text-center gap-2">
+                            <i class="fa-solid fa-right-to-bracket text-rose-400 text-2xl"></i>
+                            <p class="font-bold text-sm text-rose-200">我是客人 (P2 紅)</p>
+                            <input id="roomCodeInput" type="text" maxlength="4" placeholder="輸入 4 位房號" class="w-full bg-slate-800 text-center text-sm font-bold py-1.5 rounded border border-slate-600 focus:outline-none focus:border-rose-400 uppercase tracking-widest text-white">
+                            <button id="joinRoomBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg w-full transition">
+                                加入對戰房間
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 等待連線提示狀態 -->
+                    <div id="onlineWaitingBox" class="hidden w-full bg-indigo-950/80 border border-indigo-500/50 p-3 rounded-xl flex flex-col items-center gap-2 text-center">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-notch animate-spin text-indigo-400"></i>
+                            <span id="waitingMsg" class="text-sm font-bold text-indigo-200">正在建立房間...</span>
+                        </div>
+                        <div id="roomDisplayCode" class="text-2xl font-black tracking-widest text-yellow-400 bg-slate-900/90 px-4 py-1 rounded-lg border border-yellow-500/30">
+                            ----
+                        </div>
+                        <p class="text-xs text-slate-300">請在另一台平板輸入此房號以開始對決！</p>
+                        <button id="copyCodeBtn" class="text-xs text-indigo-300 underline hover:text-white">
+                            <i class="fa-regular fa-copy mr-1"></i>複製房號
+                        </button>
+                    </div>
+
+                    <p id="onlineStatusNotice" class="text-xs text-rose-400 hidden"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 螢幕觸控按鈕 (雙人/單人動態適應) -->
+        <div class="w-full flex justify-between items-center px-1 pt-1 select-none text-xs">
+            <!-- P1 觸控區 (左側) -->
+            <div id="p1TouchZone" class="flex items-center gap-1.5 sm:gap-2 bg-indigo-950/40 p-2 rounded-2xl border border-indigo-500/30">
+                <span class="text-indigo-400 font-bold hidden sm:inline px-1">P1</span>
+                <button id="btnP1Left" class="btn-touch w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base text-indigo-200">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <button id="btnP1Right" class="btn-touch w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base text-indigo-200">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <button id="btnP1Jump" class="btn-touch px-3 h-10 sm:h-12 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-indigo-200 bg-indigo-500/30 border-indigo-400/40">
+                    P1跳躍
+                </button>
+            </div>
+
+            <!-- P2 觸控區 (右側) -->
+            <div id="p2TouchZone" class="flex items-center gap-1.5 sm:gap-2 bg-rose-950/40 p-2 rounded-2xl border border-rose-500/30">
+                <span class="text-rose-400 font-bold hidden sm:inline px-1">P2</span>
+                <button id="btnP2Left" class="btn-touch w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base text-rose-200">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <button id="btnP2Right" class="btn-touch w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base text-rose-200">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <button id="btnP2Jump" class="btn-touch px-3 h-10 sm:h-12 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-rose-200 bg-rose-500/30 border-rose-400/40">
+                    P2跳躍
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 全域雲端連線模組
+        window.onlineEngine = {
+            db: null,
+            user: null,
+            appId: typeof __app_id !== 'undefined' ? __app_id : 'platformer-online-game',
+            currentRoomId: null,
+            myRole: null, // 'p1' 或 'p2' 或 null (local)
+            roomUnsubscribe: null,
+            lastSendTime: 0,
+
+            async init() {
+                try {
+                    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+                        ? JSON.parse(__firebase_config) 
+                        : { apiKey: "demo", authDomain: "demo.firebaseapp.com", projectId: "demo" };
+                    
+                    const app = initializeApp(firebaseConfig);
+                    const auth = getAuth(app);
+                    this.db = getFirestore(app);
+
+                    const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if (token) {
+                        const userCred = await signInWithCustomToken(auth, token);
+                        this.user = userCred.user;
+                    } else {
+                        const userCred = await signInAnonymously(auth);
+                        this.user = userCred.user;
+                    }
+                } catch (err) {
+                    console.warn("Cloud connection error, falling back to offline mode:", err);
+                }
+            },
+
+            // 創建線上房間 (P1 Host)
+            async createRoom(roomCode, skinType) {
+                if (!this.db || !this.user) return false;
+                this.currentRoomId = roomCode;
+                this.myRole = 'p1';
+
+                const roomRef = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomCode);
+                const initialData = {
+                    hostId: this.user.uid,
+                    guestId: null,
+                    status: 'waiting',
+                    p1: { x: 80, y: 300, vx: 0, vy: 0, facing: 'right', score: 0, squish: 1, squishY: 1, skin: skinType },
+                    p2: { x: 180, y: 300, vx: 0, vy: 0, facing: 'right', score: 0, squish: 1, squishY: 1, skin: skinType === 'fox' ? 'bunny' : 'fox' },
+                    collectedCoinIds: [],
+                    lastUpdated: Date.now()
+                };
+
+                await setDoc(roomRef, initialData);
+                this.listenToRoom(roomRef);
+                return true;
+            },
+
+            // 加入線上房間 (P2 Guest)
+            async joinRoom(roomCode, skinType) {
+                if (!this.db || !this.user) return { success: false, msg: "雲端服務尚未連線" };
+                const roomRef = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomCode);
+                
+                try {
+                    const snap = await getDoc(roomRef);
+                    if (!snap.exists()) {
+                        return { success: false, msg: "找不到此房號，請確認房號！" };
+                    }
+
+                    const data = snap.data();
+                    if (data.guestId && data.guestId !== this.user.uid) {
+                        return { success: false, msg: "此房間人數已滿！" };
+                    }
+
+                    this.currentRoomId = roomCode;
+                    this.myRole = 'p2';
+
+                    const updates = {
+                        guestId: this.user.uid,
+                        status: 'playing',
+                        'p2.skin': skinType,
+                        lastUpdated: Date.now()
+                    };
+
+                    await updateDoc(roomRef, updates);
+
+                    this.listenToRoom(roomRef);
+                    return { success: true };
+                } catch (e) {
+                    console.error("Join room error:", e);
+                    return { success: false, msg: "連線失敗，請再試一次" };
+                }
+            },
+
+            // 監聽房間動態
+            listenToRoom(roomRef) {
+                if (this.roomUnsubscribe) this.roomUnsubscribe();
+
+                this.roomUnsubscribe = onSnapshot(roomRef, (snapshot) => {
+                    if (!snapshot.exists()) return;
+                    const data = snapshot.data();
+
+                    if (window.handleOnlineRoomUpdate) {
+                        window.handleOnlineRoomUpdate(data);
+                    }
+                }, (error) => {
+                    console.error("Room snapshot listener error:", error);
+                });
+            },
+
+            // 發送本地角色位置給對手
+            async syncMyState(player, coins) {
+                if (!this.db || !this.currentRoomId || !this.myRole) return;
+                const now = Date.now();
+                if (now - this.lastSendTime < 40) return; // 節流發送 (~25 fps)
+                this.lastSendTime = now;
+
+                const roomRef = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.currentRoomId);
+                const updates = {};
+
+                updates[this.myRole] = {
+                    x: Math.round(player.x),
+                    y: Math.round(player.y),
+                    vx: Math.round(player.vx * 10) / 10,
+                    vy: Math.round(player.vy * 10) / 10,
+                    facing: player.facing,
+                    score: player.score,
+                    squish: Math.round(player.squish * 100) / 100,
+                    squishY: Math.round(player.squishY * 100) / 100,
+                    skin: player.skin
+                };
+
+                const collectedIds = coins.filter(c => c.collected).map(c => c.id);
+                updates.collectedCoinIds = collectedIds;
+                updates.lastUpdated = now;
+
+                try {
+                    await updateDoc(roomRef, updates);
+                } catch (e) {
+                    console.error("Sync state error:", e);
+                }
+            }
+        };
+
+        window.onlineEngine.init();
+    </script>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreP1Display = document.getElementById('scoreP1');
+        const scoreP2Display = document.getElementById('scoreP2');
+        const startOverlay = document.getElementById('startOverlay');
+        const resetBtn = document.getElementById('resetBtn');
+        const audioToggle = document.getElementById('audioToggle');
+        const audioIcon = document.getElementById('audioIcon');
+        const modeBadge = document.getElementById('modeBadge');
+        const roomInfoText = document.getElementById('roomInfoText');
+
+        // UI 模式切換元素
+        const tabLocal = document.getElementById('tabLocal');
+        const tabOnline = document.getElementById('tabOnline');
+        const panelLocal = document.getElementById('panelLocal');
+        const panelOnline = document.getElementById('panelOnline');
+        const startLocalBtn = document.getElementById('startLocalBtn');
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const roomCodeInput = document.getElementById('roomCodeInput');
+        const onlineWaitingBox = document.getElementById('onlineWaitingBox');
+        const waitingMsg = document.getElementById('waitingMsg');
+        const roomDisplayCode = document.getElementById('roomDisplayCode');
+        const onlineStatusNotice = document.getElementById('onlineStatusNotice');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+
+        const p1TouchZone = document.getElementById('p1TouchZone');
+        const p2TouchZone = document.getElementById('p2TouchZone');
+
+        let isOnlineMode = false;
+        let localRole = null; // 'p1', 'p2', or null (both local)
+        let mySelectedSkin = 'fox'; // 'fox' 或 'bunny'
+
+        // 切換選擇角色
+        window.selectCharacter = function(skinType) {
+            mySelectedSkin = skinType;
+            const selectFox = document.getElementById('selectSkinFox');
+            const selectBunny = document.getElementById('selectSkinBunny');
+            const badgeFox = document.getElementById('badgeFox');
+            const badgeBunny = document.getElementById('badgeBunny');
+
+            if (skinType === 'fox') {
+                selectFox.className = "cursor-pointer bg-slate-800 border-2 border-indigo-500 rounded-xl p-2.5 flex flex-col items-center transition relative";
+                selectBunny.className = "cursor-pointer bg-slate-800 border-2 border-transparent rounded-xl p-2.5 flex flex-col items-center transition relative";
+                badgeFox.classList.remove('hidden');
+                badgeFox.textContent = "已選擇";
+                badgeBunny.classList.add('hidden');
+            } else {
+                selectFox.className = "cursor-pointer bg-slate-800 border-2 border-transparent rounded-xl p-2.5 flex flex-col items-center transition relative";
+                selectBunny.className = "cursor-pointer bg-slate-800 border-2 border-rose-500 rounded-xl p-2.5 flex flex-col items-center transition relative";
+                badgeBunny.classList.remove('hidden');
+                badgeBunny.textContent = "已選擇";
+                badgeFox.classList.add('hidden');
+            }
+
+            // 同步更新本地 player1 形象
+            player1.skin = skinType;
+        };
+
+        // 音效系統
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type, playerPitch = 1) {
+            if (!soundEnabled || !audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'jump') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150 * playerPitch, now);
+                osc.frequency.exponentialRampToValueAtTime(400 * playerPitch, now + 0.15);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'coin') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25 * playerPitch, now);
+                osc.frequency.setValueAtTime(659.25 * playerPitch, now + 0.08);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'land') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+        }
+
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 450;
+        let isGameStarted = false;
+
+        function resizeCanvas() {
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+        }
+        resizeCanvas();
+
+        // 雙人控制按鈕狀態
+        const keys = {
+            p1Left: false, p1Right: false, p1Jump: false, p1JumpPressed: false,
+            p2Left: false, p2Right: false, p2Jump: false, p2JumpPressed: false
+        };
+
+        // 精緻 2D 萌娘角色類別 (畫布繪製)
+        class Player {
+            constructor(id, name, skin, startX, pitchFactor) {
+                this.id = id;
+                this.name = name;
+                this.skin = skin; // 'fox' (藍色狐狸女) 或 'bunny' (粉紅兔兔女)
+                this.startX = startX;
+                this.pitchFactor = pitchFactor;
+                this.width = 40;
+                this.height = 52;
+                this.score = 0;
+                this.animTimer = Math.random() * 100;
+                this.reset();
+            }
+
+            reset() {
+                this.x = this.startX;
+                this.y = 300;
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 5.5;
+                this.gravity = 0.55;
+                this.jumpForce = -12.5;
+                this.grounded = false;
+                this.facing = 'right';
+                this.squish = 1;
+                this.squishY = 1;
+                this.score = 0;
+            }
+
+            update(platforms, leftKey, rightKey, jumpKey, jumpPressedProp) {
+                this.animTimer += 0.08;
+
+                // 如果是線上對戰，且非本機玩家，由網絡數據控制
+                if (isOnlineMode && localRole && localRole !== this.id) {
+                    this.squish += (1 - this.squish) * 0.15;
+                    this.squishY += (1 - this.squishY) * 0.15;
+                    return;
+                }
+
+                // 本地/自己掌控的角色移動邏輯
+                if (keys[leftKey]) {
+                    this.vx = -this.speed;
+                    this.facing = 'left';
+                } else if (keys[rightKey]) {
+                    this.vx = this.speed;
+                    this.facing = 'right';
+                } else {
+                    this.vx *= 0.8;
+                }
+
+                // 跳躍處理
+                if (keys[jumpKey]) {
+                    if (this.grounded && !keys[jumpPressedProp]) {
+                        this.vy = this.jumpForce;
+                        this.grounded = false;
+                        this.squish = 0.7;
+                        this.squishY = 1.3;
+                        playSound('jump', this.pitchFactor);
+                        createParticles(this.x + this.width / 2, this.y + this.height, 8, this.skin === 'fox' ? '#93c5fd' : '#f472b6');
+                    }
+                    keys[jumpPressedProp] = true;
+                } else {
+                    keys[jumpPressedProp] = false;
+                }
+
+                // 重力
+                this.vy += this.gravity;
+
+                // X軸更新與邊界
+                this.x += this.vx;
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > GAME_WIDTH) this.x = GAME_WIDTH - this.width;
+
+                // Y軸更新與平台碰撞
+                const wasGrounded = this.grounded;
+                this.grounded = false;
+                this.y += this.vy;
+
+                platforms.forEach(plat => {
+                    if (this.x + this.width > plat.x &&
+                        this.x < plat.x + plat.width &&
+                        this.y + this.height >= plat.y &&
+                        this.y + this.height - this.vy <= plat.y + 10 &&
+                        this.vy >= 0) {
+                        
+                        this.y = plat.y - this.height;
+                        this.vy = 0;
+                        this.grounded = true;
+
+                        if (!wasGrounded) {
+                            this.squish = 1.3;
+                            this.squishY = 0.7;
+                            playSound('land');
+                            createParticles(this.x + this.width / 2, this.y + this.height, 5, '#cbd5e1');
+                        }
+                    }
+                });
+
+                // 彈性恢復
+                this.squish += (1 - this.squish) * 0.15;
+                this.squishY += (1 - this.squishY) * 0.15;
+            }
+
+            draw() {
+                ctx.save();
+                const cx = this.x + this.width / 2;
+                const cy = this.y + this.height;
+
+                ctx.translate(cx, cy);
+                ctx.scale(this.facing === 'left' ? -this.squish : this.squish, this.squishY);
+
+                const isFox = this.skin === 'fox';
+                const tailSwing = Math.sin(this.animTimer * 2) * 4;
+                const hairSwing = Math.cos(this.animTimer * 1.5) * 3;
+
+                // 1. 繪製尾巴 (Tail)
+                ctx.save();
+                if (isFox) {
+                    // 大狐狸尾巴 (白色+淺藍)
+                    ctx.fillStyle = '#60a5fa';
+                    ctx.beginPath();
+                    ctx.ellipse(-14, -18 + tailSwing, 18, 26, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.ellipse(-20, -22 + tailSwing, 12, 16, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 兔兔圓尾巴 (蓬鬆白球)
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(-16, -12 + tailSwing * 0.5, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fce7f3';
+                    ctx.beginPath();
+                    ctx.arc(-16, -12 + tailSwing * 0.5, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+
+                // 2. 長雙馬尾頭髮 (Back Hair / Pigtails)
+                ctx.fillStyle = '#e2e8f0'; // 銀白紫色頭髮
+                // 左馬尾
+                ctx.beginPath();
+                ctx.ellipse(-12 + hairSwing, -24, 6, 22, Math.PI / 12, 0, Math.PI * 2);
+                ctx.fill();
+                // 右馬尾
+                ctx.beginPath();
+                ctx.ellipse(12 - hairSwing, -24, 6, 22, -Math.PI / 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 3. 裙子與腿部 (Skirt & Legs)
+                ctx.fillStyle = '#fbe7e8';
+                ctx.fillRect(-8, -12, 6, 12);
+                ctx.fillRect(2, -12, 6, 12);
+                
+                // 鞋子
+                ctx.fillStyle = isFox ? '#3b82f6' : '#ec4899';
+                ctx.fillRect(-9, -4, 7, 4);
+                ctx.fillRect(1, -4, 7, 4);
+
+                // 百褶裙
+                ctx.fillStyle = isFox ? '#93c5fd' : '#f472b6';
+                ctx.beginPath();
+                ctx.moveTo(-14, -16);
+                ctx.lineTo(14, -16);
+                ctx.lineTo(16, -10);
+                ctx.lineTo(-16, -10);
+                ctx.closePath();
+                ctx.fill();
+
+                // 4. 帽衫衣服 (Hoodie Sweatshirt)
+                ctx.fillStyle = isFox ? '#bfdbfe' : '#fbcfe8';
+                ctx.beginPath();
+                ctx.roundRect(-13, -34, 26, 20, 6);
+                ctx.fill();
+
+                // 袖口與衣服拼色
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-11, -26, 22, 10);
+
+                // 5. 臉部與眼睛 (Face & Eyes)
+                ctx.fillStyle = '#fff1f2'; // 膚色
+                ctx.beginPath();
+                ctx.arc(0, -32, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 大眼睛 (Anime Eyes)
+                ctx.fillStyle = isFox ? '#1d4ed8' : '#059669'; // 藍色或綠色大眼
+                ctx.beginPath();
+                ctx.ellipse(3, -32, 2.5, 4, 0, 0, Math.PI * 2);
+                ctx.ellipse(9, -32, 2.5, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 眼神光點
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(4, -33, 1, 0, Math.PI * 2);
+                ctx.arc(10, -33, 1, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 腮紅
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.4)';
+                ctx.beginPath();
+                ctx.arc(1, -28, 2, 0, Math.PI * 2);
+                ctx.arc(11, -28, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 微笑嘴巴
+                ctx.strokeStyle = '#e11d48';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(6, -28, 1.5, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+
+                // 6. 動物帽 (Animal Hood & Ears)
+                ctx.fillStyle = isFox ? '#60a5fa' : '#f472b6';
+                ctx.beginPath();
+                ctx.arc(0, -36, 14, Math.PI, Math.PI * 2);
+                ctx.fill();
+
+                // 耳朵 (Ears)
+                if (isFox) {
+                    // 狐狸尖耳朵
+                    ctx.beginPath();
+                    ctx.moveTo(-12, -44);
+                    ctx.lineTo(-4, -58);
+                    ctx.lineTo(2, -44);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.moveTo(0, -44);
+                    ctx.lineTo(8, -58);
+                    ctx.lineTo(14, -44);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // 耳內粉紅色
+                    ctx.fillStyle = '#fca5a5';
+                    ctx.beginPath();
+                    ctx.moveTo(-9, -45);
+                    ctx.lineTo(-4, -54);
+                    ctx.lineTo(0, -45);
+                    ctx.fill();
+                } else {
+                    // 垂下或立起的長兔耳
+                    ctx.beginPath();
+                    ctx.ellipse(-8, -56, 4, 12, -0.2, 0, Math.PI * 2);
+                    ctx.ellipse(6, -56, 4, 12, 0.2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 兔耳內粉紅
+                    ctx.fillStyle = '#fce7f3';
+                    ctx.beginPath();
+                    ctx.ellipse(-8, -56, 2, 9, -0.2, 0, Math.PI * 2);
+                    ctx.ellipse(6, -56, 2, 9, 0.2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 7. 頂部頭銜標籤 (Player Tag)
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Fredoka, sans-serif';
+                ctx.textAlign = 'center';
+                const tag = (isOnlineMode && localRole === this.id) ? `${this.name} (你)` : this.name;
+                ctx.fillText(tag, 0, -68);
+
+                ctx.restore();
+            }
+        }
+
+        // 粒子系統
+        let particles = [];
+        function createParticles(x, y, count, color) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6 - 2,
+                    size: Math.random() * 4 + 2,
+                    color: color,
+                    alpha: 1,
+                    life: 0.03 + Math.random() * 0.03
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.life;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        // 平台數據
+        const platforms = [
+            { x: 0, y: 400, width: GAME_WIDTH, height: 50, color: '#334155' },
+            { x: 100, y: 310, width: 150, height: 18, color: '#475569' },
+            { x: 330, y: 240, width: 140, height: 18, color: '#475569' },
+            { x: 550, y: 310, width: 150, height: 18, color: '#475569' },
+            { x: 200, y: 130, width: 130, height: 18, color: '#475569' },
+            { x: 470, y: 130, width: 130, height: 18, color: '#475569' }
+        ];
+
+        // 金幣物件
+        class Coin {
+            constructor(id, x, y) {
+                this.id = id;
+                this.x = x;
+                this.y = y;
+                this.radius = 10;
+                this.collected = false;
+                this.angle = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                this.angle += 0.05;
+            }
+
+            draw() {
+                if (this.collected) return;
+                const floatY = this.y + Math.sin(this.angle) * 4;
+
+                ctx.save();
+                ctx.translate(this.x, floatY);
+                ctx.shadowColor = '#fbbf24';
+                ctx.shadowBlur = 10;
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#d97706';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius - 3, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        // 建立角色物件，預設 P1 藍狐狸、P2 粉兔兔
+        const player1 = new Player('p1', 'P1 藍狐', 'fox', 80, 1.0);
+        const player2 = new Player('p2', 'P2 粉兔', 'bunny', 180, 1.35);
+        let coins = [];
+
+        function spawnCoins() {
+            coins = [
+                new Coin(1, 170, 270),
+                new Coin(2, 400, 200),
+                new Coin(3, 620, 270),
+                new Coin(4, 265, 90),
+                new Coin(5, 535, 90),
+                new Coin(6, 400, 360),
+                new Coin(7, 70, 360),
+                new Coin(8, 730, 360)
+            ];
+        }
+
+        // 鍵盤與操控
+        window.addEventListener('keydown', (e) => {
+            initAudio();
+            // P1 控盤 (Local 或 線上模式為 P1 時)
+            if (!isOnlineMode || localRole === 'p1') {
+                if (e.code === 'KeyA') keys.p1Left = true;
+                if (e.code === 'KeyD') keys.p1Right = true;
+                if (e.code === 'KeyW' || e.code === 'Space') {
+                    e.preventDefault();
+                    keys.p1Jump = true;
+                }
+            }
+            // P2 控盤 (Local 或 線上模式為 P2 時)
+            if (!isOnlineMode || localRole === 'p2') {
+                if (e.code === 'ArrowLeft' || (isOnlineMode && e.code === 'KeyA')) keys.p2Left = true;
+                if (e.code === 'ArrowRight' || (isOnlineMode && e.code === 'KeyD')) keys.p2Right = true;
+                if (e.code === 'ArrowUp' || (isOnlineMode && (e.code === 'KeyW' || e.code === 'Space'))) {
+                    e.preventDefault();
+                    keys.p2Jump = true;
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (!isOnlineMode || localRole === 'p1') {
+                if (e.code === 'KeyA') keys.p1Left = false;
+                if (e.code === 'KeyD') keys.p1Right = false;
+                if (e.code === 'KeyW' || e.code === 'Space') keys.p1Jump = false;
+            }
+            if (!isOnlineMode || localRole === 'p2') {
+                if (e.code === 'ArrowLeft' || (isOnlineMode && e.code === 'KeyA')) keys.p2Left = false;
+                if (e.code === 'ArrowRight' || (isOnlineMode && e.code === 'KeyD')) keys.p2Right = false;
+                if (e.code === 'ArrowUp' || (isOnlineMode && (e.code === 'KeyW' || e.code === 'Space'))) keys.p2Jump = false;
+            }
+        });
+
+        function setupTouchButton(elementId, keyName) {
+            const btn = document.getElementById(elementId);
+            if (!btn) return;
+            const startHandler = (e) => {
+                e.preventDefault();
+                initAudio();
+                keys[keyName] = true;
+            };
+            const endHandler = (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+            };
+
+            btn.addEventListener('touchstart', startHandler);
+            btn.addEventListener('touchend', endHandler);
+            btn.addEventListener('mousedown', startHandler);
+            btn.addEventListener('mouseup', endHandler);
+            btn.addEventListener('mouseleave', endHandler);
+        }
+
+        setupTouchButton('btnP1Left', 'p1Left');
+        setupTouchButton('btnP1Right', 'p1Right');
+        setupTouchButton('btnP1Jump', 'p1Jump');
+
+        setupTouchButton('btnP2Left', 'p2Left');
+        setupTouchButton('btnP2Right', 'p2Right');
+        setupTouchButton('btnP2Jump', 'p2Jump');
+
+        function drawBackground() {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.beginPath();
+            ctx.arc(100, 80, 30, 0, Math.PI * 2);
+            ctx.arc(450, 60, 50, 0, Math.PI * 2);
+            ctx.arc(700, 100, 40, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPlatforms() {
+            platforms.forEach(plat => {
+                ctx.fillStyle = plat.color;
+                ctx.beginPath();
+                ctx.roundRect(plat.x, plat.y, plat.width, plat.height, 8);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath();
+                ctx.roundRect(plat.x, plat.y, plat.width, 4, [8, 8, 0, 0]);
+                ctx.fill();
+            });
+        }
+
+        function checkCoinCollision(player) {
+            // 在線上模式，只有控制該角色的本機可以觸發吃金幣判定
+            if (isOnlineMode && localRole && localRole !== player.id) return;
+
+            coins.forEach(coin => {
+                if (!coin.collected) {
+                    const dist = Math.hypot(
+                        (player.x + player.width / 2) - coin.x,
+                        (player.y + player.height / 2) - coin.y
+                    );
+                    if (dist < player.width / 2 + coin.radius) {
+                        coin.collected = true;
+                        player.score += 10;
+                        if (player.id === 'p1') scoreP1Display.textContent = player.score;
+                        if (player.id === 'p2') scoreP2Display.textContent = player.score;
+                        playSound('coin', player.pitchFactor);
+                        createParticles(coin.x, coin.y, 12, player.skin === 'fox' ? '#60a5fa' : '#f472b6');
+                    }
+                }
+            });
+        }
+
+        // 接收線上房間即時資料更新
+        window.handleOnlineRoomUpdate = function(data) {
+            if (!isOnlineMode) return;
+
+            // 如果主機正在等待玩家加入，而客人加入了
+            if (data.status === 'playing' && !isGameStarted) {
+                isGameStarted = true;
+                startOverlay.classList.add('opacity-0', 'pointer-events-none');
+                showNotification("線上玩家已連線，對決開始！");
+            }
+
+            // 更新對手玩家位置 (插值平滑移動)與造型
+            if (localRole === 'p1' && data.p2) {
+                player2.x += (data.p2.x - player2.x) * 0.4;
+                player2.y += (data.p2.y - player2.y) * 0.4;
+                player2.facing = data.p2.facing;
+                player2.squish = data.p2.squish || 1;
+                player2.squishY = data.p2.squishY || 1;
+                player2.score = data.p2.score || 0;
+                player2.skin = data.p2.skin || 'bunny';
+                scoreP2Display.textContent = player2.score;
+            } else if (localRole === 'p2' && data.p1) {
+                player1.x += (data.p1.x - player1.x) * 0.4;
+                player1.y += (data.p1.y - player1.y) * 0.4;
+                player1.facing = data.p1.facing;
+                player1.squish = data.p1.squish || 1;
+                player1.squishY = data.p1.squishY || 1;
+                player1.score = data.p1.score || 0;
+                player1.skin = data.p1.skin || 'fox';
+                scoreP1Display.textContent = player1.score;
+            }
+
+            // 同步已被收集的金幣
+            if (data.collectedCoinIds && Array.isArray(data.collectedCoinIds)) {
+                coins.forEach(c => {
+                    if (data.collectedCoinIds.includes(c.id) && !c.collected) {
+                        c.collected = true;
+                        createParticles(c.x, c.y, 10, '#fbbf24');
+                    }
+                });
+            }
+        };
+
+        // 顯示通知訊息
+        function showNotification(msg) {
+            onlineStatusNotice.textContent = msg;
+            onlineStatusNotice.classList.remove('hidden');
+            setTimeout(() => onlineStatusNotice.classList.add('hidden'), 4000);
+        }
+
+        // 遊戲主循環
+        function gameLoop() {
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            drawBackground();
+            drawPlatforms();
+
+            if (isGameStarted) {
+                // 更新角色
+                player1.update(platforms, 'p1Left', 'p1Right', 'p1Jump', 'p1JumpPressed');
+                checkCoinCollision(player1);
+
+                player2.update(platforms, 'p2Left', 'p2Right', 'p2Jump', 'p2JumpPressed');
+                checkCoinCollision(player2);
+
+                // 線上模式：自動向雲端發送我的座標
+                if (isOnlineMode && window.onlineEngine) {
+                    const myPlayer = localRole === 'p1' ? player1 : player2;
+                    window.onlineEngine.syncMyState(myPlayer, coins);
+                }
+
+                // 金幣更新與繪製
+                coins.forEach(coin => {
+                    coin.update();
+                    coin.draw();
+                });
+
+                // 金幣全部收集完後重新生成
+                if (coins.every(c => c.collected)) {
+                    setTimeout(() => spawnCoins(), 800);
+                }
+
+                updateParticles();
+                drawParticles();
+            }
+
+            player1.draw();
+            player2.draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 模式切換邏輯
+        tabLocal.addEventListener('click', () => {
+            tabLocal.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-indigo-600 text-white transition";
+            tabOnline.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition";
+            panelLocal.classList.remove('hidden');
+            panelOnline.classList.add('hidden');
+            panelLocal.classList.add('flex');
+            panelOnline.classList.remove('flex');
+        });
+
+        tabOnline.addEventListener('click', () => {
+            tabOnline.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-indigo-600 text-white transition";
+            tabLocal.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition";
+            panelOnline.classList.remove('hidden');
+            panelLocal.classList.add('hidden');
+            panelOnline.classList.add('flex');
+            panelLocal.classList.remove('flex');
+        });
+
+        // 開始本地雙人模式
+        startLocalBtn.addEventListener('click', () => {
+            initAudio();
+            isOnlineMode = false;
+            localRole = null;
+            modeBadge.textContent = "本地雙人模式";
+            modeBadge.className = "text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600";
+            p1TouchZone.classList.remove('hidden');
+            p2TouchZone.classList.remove('hidden');
+
+            player1.skin = mySelectedSkin;
+            player2.skin = mySelectedSkin === 'fox' ? 'bunny' : 'fox';
+            player1.reset();
+            player2.reset();
+            scoreP1Display.textContent = '0';
+            scoreP2Display.textContent = '0';
+            spawnCoins();
+
+            isGameStarted = true;
+            startOverlay.classList.add('opacity-0', 'pointer-events-none');
+        });
+
+        // 創建線上房間
+        createRoomBtn.addEventListener('click', async () => {
+            initAudio();
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            
+            onlineWaitingBox.classList.remove('hidden');
+            waitingMsg.textContent = "正在建立房間...";
+            roomDisplayCode.textContent = code;
+
+            const res = await window.onlineEngine.createRoom(code, mySelectedSkin);
+            if (res) {
+                isOnlineMode = true;
+                localRole = 'p1';
+                player1.skin = mySelectedSkin;
+                modeBadge.textContent = `線上模式 (房號: ${code})`;
+                modeBadge.className = "text-xs px-2 py-0.5 rounded-full bg-indigo-600 text-white border border-indigo-400";
+                roomInfoText.textContent = "你是 P1 主機！等待玩家 2 加入...";
+                
+                p1TouchZone.classList.remove('hidden');
+                p2TouchZone.classList.add('hidden');
+
+                waitingMsg.textContent = "等待對手平板加入中...";
+            } else {
+                showNotification("連線失敗，請檢查網路狀態");
+            }
+        });
+
+        // 加入線上房間
+        joinRoomBtn.addEventListener('click', async () => {
+            initAudio();
+            const code = roomCodeInput.value.trim();
+            if (!code || code.length !== 4) {
+                showNotification("請輸入 4 位數字房號！");
+                return;
+            }
+
+            const res = await window.onlineEngine.joinRoom(code, mySelectedSkin);
+            if (res.success) {
+                isOnlineMode = true;
+                localRole = 'p2';
+                player2.skin = mySelectedSkin;
+                modeBadge.textContent = `線上模式 (房號: ${code})`;
+                modeBadge.className = "text-xs px-2 py-0.5 rounded-full bg-rose-600 text-white border border-rose-400";
+                roomInfoText.textContent = "你是 P2 客人！已成功加入對決";
+
+                p1TouchZone.classList.add('hidden');
+                p2TouchZone.classList.remove('hidden');
+
+                player1.reset();
+                player2.reset();
+                spawnCoins();
+
+                isGameStarted = true;
+                startOverlay.classList.add('opacity-0', 'pointer-events-none');
+            } else {
+                showNotification(res.msg);
+            }
+        });
+
+        copyCodeBtn.addEventListener('click', () => {
+            const code = roomDisplayCode.textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                showNotification("房號已成功複製到剪貼簿！");
+            }).catch(() => {
+                document.execCommand('copy');
+                showNotification("房號已複製！");
+            });
+        });
+
+        function resetGame() {
+            player1.reset();
+            player2.reset();
+            scoreP1Display.textContent = '0';
+            scoreP2Display.textContent = '0';
+            spawnCoins();
+        }
+
+        resetBtn.addEventListener('click', resetGame);
+
+        audioToggle.addEventListener('click', () => {
+            initAudio();
+            soundEnabled = !soundEnabled;
+            if (soundEnabled) {
+                audioIcon.className = 'fa-solid fa-volume-high';
+            } else {
+                audioIcon.className = 'fa-solid fa-volume-xmark text-rose-400';
+            }
+        });
+
+        spawnCoins();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
